@@ -10,6 +10,7 @@
 #include <linux/mm.h>
 #include <linux/dma-mapping.h>
 #include <linux/err.h>
+#include <linux/vmalloc.h>
 
 #ifdef _CUDA
 #include <nv-p2p.h>
@@ -143,17 +144,20 @@ static long map_user_pages(struct map* map)
         return -ENOMEM;
     }
 
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(4, 5, 7)
-#warning "Building for older kernel, not properly tested"
-    retval = get_user_pages(current, current->mm, map->vaddr, map->n_addrs, 1, 0, pages, NULL);
-#elif LINUX_VERSION_CODE <= KERNEL_VERSION(4, 8, 17)
-#warning "Building for older kernel, not properly tested"
-    retval = get_user_pages(map->vaddr, map->n_addrs, 1, 0, pages, NULL);
-#else
-    retval = get_user_pages(map->vaddr, map->n_addrs, FOLL_WRITE, pages, NULL);
-#endif
-    if (retval <= 0)
-    {
+    #if LINUX_VERSION_CODE <= KERNEL_VERSION(4, 5, 7)
+    #warning "Building for older kernel, not properly tested"
+        retval = get_user_pages(current, current->mm, map->vaddr, map->n_addrs, 1, 0, pages, NULL);
+    #elif LINUX_VERSION_CODE <= KERNEL_VERSION(4, 8, 17)
+    #warning "Building for older kernel, not properly tested"
+        retval = get_user_pages(map->vaddr, map->n_addrs, 1, 0, pages, NULL);
+    #elif LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0)
+        retval = get_user_pages(map->vaddr, map->n_addrs, FOLL_WRITE, pages, NULL);
+    #else
+        // For kernel 5.x and above
+        retval = get_user_pages(map->vaddr, map->n_addrs, FOLL_WRITE, pages);
+    #endif
+    
+    if (retval <= 0) {
         kfree(pages);
         printk(KERN_ERR "get_user_pages() failed: %ld\n", retval);
         return retval;
